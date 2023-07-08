@@ -31,6 +31,31 @@ PcapPlusPlus::~PcapPlusPlus()
     }
 }
 
+bool PcapPlusPlus::openPcap()
+{
+    if (!reader)
+        return false;
+
+    if (reader->isOpened())
+        throw std::runtime_error("PCAP File already open. Close it first.");
+
+    return reader->open();
+}
+
+void PcapPlusPlus::closePcap()
+{
+    if (reader)
+        reader->close();
+}
+
+bool PcapPlusPlus::setFilter(QString filter)
+{
+    if (reader)
+        return reader->setFilter(filter.toStdString());
+
+    return false;
+}
+
 bool PcapPlusPlus::processPacket(pcpp::Packet & packet)
 {
     pcpp::RawPacket rawPacket;
@@ -80,6 +105,16 @@ std::vector<pcpp::Packet>::iterator PcapPlusPlus::parsedPacketsBegin()
 std::vector<pcpp::Packet>::iterator PcapPlusPlus::parsedPacketsEnd()
 {
     return parsedPackets.end();
+}
+
+bool PcapPlusPlus::getPcapStatistics(pcpp::IFileDevice::PcapStats & stats)
+{
+    if (reader) {
+        reader->getStatistics(stats);
+        return true;
+    }
+
+    return false;
 }
 
 const pcpp::Layer *PcapPlusPlus::getFirstLayer(const pcpp::Packet & packet)

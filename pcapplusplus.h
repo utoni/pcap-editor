@@ -10,6 +10,9 @@ class PcapPlusPlus
 public:
     explicit PcapPlusPlus(std::string fileName);
     ~PcapPlusPlus();
+    bool openPcap();
+    void closePcap();
+    bool setFilter(QString filter);
     bool processPacket(pcpp::Packet & packet);
     pcpp::RawPacket &getRawPacket(size_t index);
     pcpp::Packet &getParsedPacket(size_t index);
@@ -17,6 +20,7 @@ public:
     std::vector<pcpp::RawPacket>::iterator rawPacketsEnd();
     std::vector<pcpp::Packet>::iterator parsedPacketsBegin();
     std::vector<pcpp::Packet>::iterator parsedPacketsEnd();
+    bool getPcapStatistics(pcpp::IFileDevice::PcapStats & stats);
 
     static const pcpp::Layer *getFirstLayer(const pcpp::Packet & packet);
     static QString getProtocolTypeAsString(pcpp::ProtocolType protocolType);

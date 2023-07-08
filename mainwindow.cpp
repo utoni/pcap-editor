@@ -25,6 +25,24 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+    connect(ui->lineEdit, &QLineEdit::returnPressed, this, [&](){
+        if (ppp) {
+            if (!ppp->setFilter(ui->lineEdit->text()))
+                ui->lineEdit->setStyleSheet("QLineEdit { background: rgb(255, 0, 0); }");
+            else {
+                ui->lineEdit->setStyleSheet("QLineEdit { background: rgb(255, 255, 255); }");
+                ppp->closePcap();
+                if (!ppp->openPcap())
+                    throw std::runtime_error("Reopen PCAP File to apply a BPF failed.");
+                if (!ppp->setFilter(ui->lineEdit->text()))
+                    throw std::runtime_error("Could not re-apply a previously set filter.");
+                ui->tableWidget->clear();
+                ui->tableWidget->setRowCount(0);
+                emit processPcap();
+            }
+        }
+    });
+
     connect(ui->actionSave, &QAction::triggered, this, [&](bool){
         QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"));
         if (fileName.length() > 0) {
@@ -48,6 +66,12 @@ MainWindow::MainWindow(QWidget *parent)
                 firstPacketTs = packet.getRawPacket()->getPacketTimeStamp().tv_sec;
             emit onPacketAvailable(packet);
         }
+        pcpp::PcapFileReaderDevice::PcapStats stats;
+        if (ppp->getPcapStatistics(stats))
+            ui->statusbar->showMessage("PCAP loaded. Packets: " + QString::fromStdString(std::to_string(stats.packetsRecv))
+                                       + ", Dropped: " + QString::fromStdString(std::to_string(stats.packetsDrop)));
+        else
+            ui->statusbar->showMessage("No PCAP statistics available.");
     });
 
     connect(this, &MainWindow::onPacketAvailable, this, [&](const pcpp::Packet& packet) {
