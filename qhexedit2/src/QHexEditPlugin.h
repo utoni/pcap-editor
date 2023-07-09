@@ -3,11 +3,7 @@
 
 #include <QObject>
 
-#if QT_VERSION < QT_VERSION_CHECK(5,0,0)
-#include <QtDesigner/QDesignerCustomWidgetInterface>
-#else
-#include <QDesignerCustomWidgetInterface>
-#endif
+#include <QtUiPlugin/QDesignerCustomWidgetInterface>
 
 class QHexEditPlugin : public QObject, public QDesignerCustomWidgetInterface
 {
