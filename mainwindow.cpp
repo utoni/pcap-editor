@@ -50,6 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
 
         switch (option) {
         case ByteWindowOption::BWO_UNKNOWN:
+            throw std::runtime_error("Unknown byte window option");
         case ByteWindowOption::BWO_INSERT: {
             uint8_t *new_bytes = new uint8_t[size];
             if (!new_bytes)
@@ -66,6 +67,8 @@ MainWindow::MainWindow(QWidget *parent)
             myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             break;
         }
+
+        myHexEdit.editor.setCursorPosition(offset * 2);
     });
 
     connect(&myHexEdit.editor, &QAbstractScrollArea::customContextMenuRequested, this, [&](const QPoint& pos){
@@ -74,10 +77,11 @@ MainWindow::MainWindow(QWidget *parent)
         auto globalPos = myHexEdit.editor.mapToGlobal(pos);
         auto selectedItem = myHexEdit.contextMenu.exec(globalPos);
         const auto cursorPos = myHexEdit.editor.cursorPosition() / 2;
-        const auto& selectedLength = myHexEdit.editor.getSelectionEnd() - myHexEdit.editor.getSelectionBegin();
-        const auto& showByteWindow = [&](const ByteWindowOption& opt, int offset) {
-          myHexEdit.bytewindow.set(opt, offset, selectedLength > 0 ? selectedLength : 1);
-          myHexEdit.bytewindow.show();
+        const auto& selectionBegin = myHexEdit.editor.getSelectionBegin();
+        const auto& selectedLength = myHexEdit.editor.getSelectionEnd() - selectionBegin;
+        const auto& showByteWindow = [this, selectedLength](const ByteWindowOption& opt, int offset) {
+            myHexEdit.bytewindow.set(opt, offset, selectedLength > 0 ? selectedLength : 1);
+            myHexEdit.bytewindow.show();
         };
 
         if (selectedItem == &myHexEdit.prependBytes) {
@@ -95,12 +99,13 @@ MainWindow::MainWindow(QWidget *parent)
 
             rawPacket->removeData(myHexEdit.editor.getSelectionBegin(), selectedLength);
             myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
+            myHexEdit.editor.setCursorPosition(selectionBegin * 2);
         } else if (selectedItem) {
             throw std::runtime_error("Unknown context menu " + selectedItem->text().toStdString());
         }
     });
 
-    connect(ui->actionOpen, &QAction::triggered, this, [&](bool){
+    connect(ui->actionOpen, &QAction::triggered, this, [this, enableMenuButtons, enableHexEditButtons](bool){
         QString fileName = QFileDialog::getOpenFileName(this, tr("Open PCAP File"), "", tr("PCAP Files (*.pcap)"));
         if (fileName.length() > 0) {
             if (ppp) {
@@ -110,7 +115,7 @@ MainWindow::MainWindow(QWidget *parent)
             ui->lineEdit->clear();
             ui->tableWidget->clear();
             ui->tableWidget->setRowCount(0);
-            myHexEdit.editor.data().clear();
+            myHexEdit.editor.data().data_ptr()->clear();
             enableMenuButtons(this, true);
             enableHexEditButtons(this, false);
             ppp = new PcapPlusPlus(fileName.toStdString());
