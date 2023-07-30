@@ -5,6 +5,7 @@
 #include "pcapplusplus.h"
 #include "qhexedit2/src/qhexedit.h"
 
+#include <optional>
 #include <QMainWindow>
 #include <QMenu>
 
@@ -19,7 +20,7 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-
+    pcpp::RawPacket* currentSelectedPacket();
 private:
     struct {
         QMenu contextMenu;

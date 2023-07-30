@@ -42,11 +42,9 @@ MainWindow::MainWindow(QWidget *parent)
         const auto option = myHexEdit.bytewindow.getOption();
         const auto offset = myHexEdit.bytewindow.getOffset();
         const auto size = myHexEdit.bytewindow.getSize();
-
-        const auto &selected = ui->tableWidget->selectedItems();
-        if (selected.empty())
+        const auto rawPacket = currentSelectedPacket();
+        if (!rawPacket)
             return;
-        auto &rawPacket = ppp->getRawPacket(selected.last()->row());
 
         switch (option) {
         case ByteWindowOption::BWO_UNKNOWN:
@@ -55,14 +53,14 @@ MainWindow::MainWindow(QWidget *parent)
             if (!new_bytes)
                 break;
             memset(new_bytes, 0, size);
-            rawPacket.insertData(offset, new_bytes, size);
-            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            rawPacket->insertData(offset, new_bytes, size);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             delete[] new_bytes;
             break;
         }
         case ByteWindowOption::BWO_DELETE:
-            rawPacket.removeData(offset, size);
-            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            rawPacket->removeData(offset, size);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             break;
         }
     });
@@ -86,16 +84,14 @@ MainWindow::MainWindow(QWidget *parent)
         } else if (selectedItem == &myHexEdit.deleteBytes) {
             showByteWindow(ByteWindowOption::BWO_DELETE, cursorPos);
         } else if (selectedItem == &myHexEdit.deleteSelection) {
-            const auto &selected = ui->tableWidget->selectedItems();
-            if (selected.empty())
+            const auto rawPacket = currentSelectedPacket();
+            if (!rawPacket)
+                return;
+            if (selectedLength == rawPacket->getRawDataLen())
                 return;
 
-            auto &rawPacket = ppp->getRawPacket(selected.last()->row());
-            if (selectedLength == rawPacket.getRawDataLen())
-                return;
-
-            rawPacket.removeData(myHexEdit.editor.getSelectionBegin(), selectedLength);
-            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            rawPacket->removeData(myHexEdit.editor.getSelectionBegin(), selectedLength);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
         } else if (selectedItem) {
             throw std::runtime_error("Unknown context menu " + selectedItem->text().toStdString());
         }
@@ -235,22 +231,19 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(&myHexEdit.editor, &QHexEdit::dataChanged, this, [&] {
-        const auto &selected = ui->tableWidget->selectedItems();
-        if (selected.empty())
+        const auto rawPacket = currentSelectedPacket();
+        if (!rawPacket)
             return;
-
-        auto &rawPacket = ppp->getRawPacket(selected.last()->row());
         const auto& cursorPos = myHexEdit.editor.cursorPosition() / 2;
         auto cursorData = myHexEdit.editor.dataAt(cursorPos, 1);
         if (myHexEdit.editor.cursorPosition() % 2 != 0 && myHexEdit.editor.cursorPosition() / 2 == myHexEdit.editor.data().size() - 1) {
             const uint8_t new_byte = 0x00;
-            rawPacket.insertData(rawPacket.getRawDataLen(), &new_byte, sizeof(new_byte));
-            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            rawPacket->insertData(rawPacket->getRawDataLen(), &new_byte, sizeof(new_byte));
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             myHexEdit.editor.setCursorPosition(cursorPos * 2 + 1);
         }
-
-        rawPacket.removeData(cursorPos, 1);
-        rawPacket.insertData(cursorPos, reinterpret_cast<const uint8_t *>(cursorData.data()), cursorData.size());
+        rawPacket->removeData(cursorPos, 1);
+        rawPacket->insertData(cursorPos, reinterpret_cast<const uint8_t *>(cursorData.data()), cursorData.size());
     });
 }
 
@@ -258,4 +251,13 @@ MainWindow::~MainWindow()
 {
     delete ui;
     delete ppp;
+}
+
+pcpp::RawPacket* MainWindow::currentSelectedPacket()
+{
+    const auto &selected = ui->tableWidget->selectedItems();
+    if (selected.empty())
+        return nullptr;
+
+    return &ppp->getRawPacket(selected.last()->row());
 }
