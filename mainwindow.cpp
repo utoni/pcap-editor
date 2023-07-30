@@ -141,13 +141,14 @@ MainWindow::MainWindow(QWidget *parent)
             QString selectedFilter;
             QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"), &selectedFilter);
             if (fileName.length() > 0) {
-                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString() + ".pcap", ppp->getLinkLayer());
+                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), ppp->getLinkLayer());
                 if (!pcapWriter.open())
                     throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
                 {
                     for (auto rawPacket = ppp->rawPacketsBegin(); rawPacket < ppp->rawPacketsEnd(); rawPacket++) {
                         pcapWriter.writePacket(*rawPacket);
                     }
+                    pcapWriter.flush();
                 }
             }
         }
