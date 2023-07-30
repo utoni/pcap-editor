@@ -53,8 +53,14 @@ border-style: outset;
 border-width: 2px;
 border-color: beige;</string>
         </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::ExtendedSelection</enum>
+        </property>
         <property name="selectionBehavior">
          <enum>QAbstractItemView::SelectRows</enum>
+        </property>
+        <property name="cornerButtonEnabled">
+         <bool>true</bool>
         </property>
         <property name="columnCount">
          <number>12</number>

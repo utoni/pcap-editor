@@ -1,10 +1,12 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "bytewindow.h"
 #include "pcapplusplus.h"
 #include "qhexedit2/src/qhexedit.h"
 
 #include <QMainWindow>
+#include <QMenu>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -19,10 +21,19 @@ public:
     ~MainWindow();
 
 private:
-    QHexEdit myHexEdit;
+    struct {
+        QMenu contextMenu;
+        QAction prependBytes;
+        QAction appendBytes;
+        QAction deleteBytes;
+        QAction deleteSelection;
+        QHexEdit editor;
+        ByteWindow bytewindow;
+    } myHexEdit;
+
     time_t firstPacketTs;
-    Ui::MainWindow *ui;
     PcapPlusPlus *ppp;
+    Ui::MainWindow *ui;
 
 signals:
     void processPcap();

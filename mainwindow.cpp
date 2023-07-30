@@ -4,6 +4,8 @@
 #include <exception>
 #include <qfiledialog.h>
 
+#include <iostream>
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , myHexEdit()
@@ -11,7 +13,93 @@ MainWindow::MainWindow(QWidget *parent)
     , ppp(nullptr)
 {
     ui->setupUi(this);
-    ui->gridLayout->addWidget(&myHexEdit);
+    ui->gridLayout->addWidget(&myHexEdit.editor);
+
+    const auto& enableButtons = [](MainWindow *mainwindow, bool enable, bool ui_edit_only = false) {
+        if (!ui_edit_only)
+            mainwindow->ui->actionSave->setEnabled(enable);
+        mainwindow->myHexEdit.prependBytes.setEnabled(enable);
+        mainwindow->myHexEdit.appendBytes.setEnabled(enable);
+        mainwindow->myHexEdit.deleteBytes.setEnabled(enable);
+        mainwindow->myHexEdit.deleteSelection.setEnabled(enable);
+    };
+    enableButtons(this, false);
+
+    myHexEdit.editor.setContextMenuPolicy(Qt::CustomContextMenu);
+    myHexEdit.prependBytes.setText("Prepend byte(s)..");
+    myHexEdit.appendBytes.setText("Append byte(s)..");
+    myHexEdit.deleteBytes.setText("Delete byte(s)..");
+    myHexEdit.deleteSelection.setText("Delete Selection");
+    myHexEdit.contextMenu.addAction(&myHexEdit.prependBytes);
+    myHexEdit.contextMenu.addAction(&myHexEdit.appendBytes);
+    myHexEdit.contextMenu.addAction(&myHexEdit.deleteBytes);
+    myHexEdit.contextMenu.addAction(&myHexEdit.deleteSelection);
+
+    connect(&myHexEdit.bytewindow, &QDialog::finished, this, [&](int result) {
+        if (result == 0)
+            return;
+
+        const auto option = myHexEdit.bytewindow.getOption();
+        const auto offset = myHexEdit.bytewindow.getOffset();
+        const auto size = myHexEdit.bytewindow.getSize();
+
+        const auto &selected = ui->tableWidget->selectedItems();
+        if (selected.empty())
+            return;
+        auto &rawPacket = ppp->getRawPacket(selected.last()->row());
+
+        switch (option) {
+        case ByteWindowOption::BWO_UNKNOWN:
+        case ByteWindowOption::BWO_INSERT: {
+            uint8_t *new_bytes = new uint8_t[size];
+            if (!new_bytes)
+                break;
+            memset(new_bytes, 0, size);
+            rawPacket.insertData(offset, new_bytes, size);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            delete[] new_bytes;
+            break;
+        }
+        case ByteWindowOption::BWO_DELETE:
+            rawPacket.removeData(offset, size);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            break;
+        }
+    });
+
+    connect(&myHexEdit.editor, &QAbstractScrollArea::customContextMenuRequested, this, [&](const QPoint& pos){
+        myHexEdit.deleteSelection.setEnabled(myHexEdit.editor.selectedData().size() != 0);
+
+        auto globalPos = myHexEdit.editor.mapToGlobal(pos);
+        auto selectedItem = myHexEdit.contextMenu.exec(globalPos);
+        const auto cursorPos = myHexEdit.editor.cursorPosition() / 2;
+        const auto& selectedLength = myHexEdit.editor.getSelectionEnd() - myHexEdit.editor.getSelectionBegin();
+        const auto& showByteWindow = [&](const ByteWindowOption& opt, int offset) {
+          myHexEdit.bytewindow.set(opt, offset, selectedLength > 0 ? selectedLength : 1);
+          myHexEdit.bytewindow.show();
+        };
+
+        if (selectedItem == &myHexEdit.prependBytes) {
+            showByteWindow(ByteWindowOption::BWO_INSERT, cursorPos);
+        } else if (selectedItem == &myHexEdit.appendBytes) {
+            showByteWindow(ByteWindowOption::BWO_INSERT, cursorPos + 1);
+        } else if (selectedItem == &myHexEdit.deleteBytes) {
+            showByteWindow(ByteWindowOption::BWO_DELETE, cursorPos);
+        } else if (selectedItem == &myHexEdit.deleteSelection) {
+            const auto &selected = ui->tableWidget->selectedItems();
+            if (selected.empty())
+                return;
+
+            auto &rawPacket = ppp->getRawPacket(selected.last()->row());
+            if (selectedLength == rawPacket.getRawDataLen())
+                return;
+
+            rawPacket.removeData(myHexEdit.editor.getSelectionBegin(), selectedLength);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+        } else if (selectedItem) {
+            throw std::runtime_error("Unknown context menu " + selectedItem->text().toStdString());
+        }
+    });
 
     connect(ui->actionOpen, &QAction::triggered, this, [&](bool){
         QString fileName = QFileDialog::getOpenFileName(this, tr("Open PCAP File"), "", tr("PCAP Files (*.pcap)"));
@@ -20,6 +108,9 @@ MainWindow::MainWindow(QWidget *parent)
                 delete ppp;
                 ppp = nullptr;
             }
+            ui->lineEdit->clear();
+            ui->tableWidget->clear();
+            ui->tableWidget->setRowCount(0);
             ppp = new PcapPlusPlus(fileName.toStdString());
             if (ppp) emit processPcap();
         }
@@ -44,14 +135,16 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(ui->actionSave, &QAction::triggered, this, [&](bool){
-        QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"));
-        if (fileName.length() > 0) {
-            pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), pcpp::LINKTYPE_ETHERNET);
-            if (!pcapWriter.open())
-                throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
-            {
-                for (auto rawPacket = ppp->rawPacketsBegin(); rawPacket < ppp->rawPacketsEnd(); rawPacket++) {
-                    pcapWriter.writePacket(*rawPacket);
+        if (ppp) {
+            QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"));
+            if (fileName.length() > 0) {
+                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), pcpp::LINKTYPE_ETHERNET);
+                if (!pcapWriter.open())
+                    throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
+                {
+                    for (auto rawPacket = ppp->rawPacketsBegin(); rawPacket < ppp->rawPacketsEnd(); rawPacket++) {
+                        pcapWriter.writePacket(*rawPacket);
+                    }
                 }
             }
         }
@@ -128,15 +221,34 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->tableWidget, &QTableWidget::cellPressed, this, [&] {
         const auto &selected = ui->tableWidget->selectedItems();
+        if (selected.empty())
+            return;
+
         const auto &rawPacket = ppp->getRawPacket(selected.last()->row());
-        myHexEdit.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+        myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
     });
 
-    connect(&myHexEdit, &QHexEdit::dataChanged, this, [&] {
+    connect(ui->tableWidget, &QTableWidget::itemSelectionChanged, this, [&]() {
+        enableButtons(this, ui->tableWidget->selectedItems().size() > 0, true);
+        if (ui->tableWidget->selectedItems().size() == 0 && myHexEdit.editor.data().size() > 0)
+            myHexEdit.editor.setData(QByteArray());
+    });
+
+    connect(&myHexEdit.editor, &QHexEdit::dataChanged, this, [&] {
         const auto &selected = ui->tableWidget->selectedItems();
+        if (selected.empty())
+            return;
+
         auto &rawPacket = ppp->getRawPacket(selected.last()->row());
-        const auto cursorPos = myHexEdit.cursorPosition() / 2;
-        const auto cursorData = myHexEdit.dataAt(cursorPos, 1);
+        const auto& cursorPos = myHexEdit.editor.cursorPosition() / 2;
+        auto cursorData = myHexEdit.editor.dataAt(cursorPos, 1);
+        if (myHexEdit.editor.cursorPosition() % 2 != 0 && myHexEdit.editor.cursorPosition() / 2 == myHexEdit.editor.data().size() - 1) {
+            const uint8_t new_byte = 0x00;
+            rawPacket.insertData(rawPacket.getRawDataLen(), &new_byte, sizeof(new_byte));
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+            myHexEdit.editor.setCursorPosition(cursorPos * 2 + 1);
+        }
+
         rawPacket.removeData(cursorPos, 1);
         rawPacket.insertData(cursorPos, reinterpret_cast<const uint8_t *>(cursorData.data()), cursorData.size());
     });

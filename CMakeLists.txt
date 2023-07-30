@@ -9,7 +9,12 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CPACK_PACKAGE_CONTACT "toni@impl.cc")
+set(CPACK_DEBIAN_PACKAGE_NAME "pcap-editor")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
 include(ExternalProject)
+include(CPack)
 
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets)
@@ -42,9 +47,14 @@ endif()
 
 set(PROJECT_SOURCES
         main.cpp
+
         mainwindow.cpp
         mainwindow.h
         mainwindow.ui
+
+        bytewindow.cpp
+        bytewindow.h
+        bytewindow.ui
 
         pcapplusplus.cpp
         pcapplusplus.h

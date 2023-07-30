@@ -365,7 +365,7 @@ public:
     QColor selectionColor();
     void setSelectionColor(const QColor &color);
 
-protected:
+public:
     // Handle events
     void keyPressEvent(QKeyEvent *event);
     void mouseMoveEvent(QMouseEvent * event);
@@ -373,7 +373,6 @@ protected:
     void paintEvent(QPaintEvent *event);
     void resizeEvent(QResizeEvent *);
     virtual bool focusNextPrevChild(bool next);
-private:
     // Handle selections
     void resetSelection(qint64 pos);            // set selectionStart and selectionEnd to pos
     void resetSelection();                      // set selectionEnd to selectionStart
