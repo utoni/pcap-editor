@@ -15,15 +15,17 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     ui->gridLayout->addWidget(&myHexEdit.editor);
 
-    const auto& enableButtons = [](MainWindow *mainwindow, bool enable, bool ui_edit_only = false) {
-        if (!ui_edit_only)
-            mainwindow->ui->actionSave->setEnabled(enable);
+    const auto& enableMenuButtons = [](MainWindow *mainwindow, bool enable) {
+        mainwindow->ui->actionSave->setEnabled(enable);
+    };
+    const auto& enableHexEditButtons = [](MainWindow *mainwindow, bool enable) {
         mainwindow->myHexEdit.prependBytes.setEnabled(enable);
         mainwindow->myHexEdit.appendBytes.setEnabled(enable);
         mainwindow->myHexEdit.deleteBytes.setEnabled(enable);
         mainwindow->myHexEdit.deleteSelection.setEnabled(enable);
     };
-    enableButtons(this, false);
+    enableMenuButtons(this, false);
+    enableHexEditButtons(this, false);
 
     myHexEdit.editor.setContextMenuPolicy(Qt::CustomContextMenu);
     myHexEdit.prependBytes.setText("Prepend byte(s)..");
@@ -53,6 +55,7 @@ MainWindow::MainWindow(QWidget *parent)
             if (!new_bytes)
                 break;
             memset(new_bytes, 0, size);
+            rawPacket->reallocateData(rawPacket->getRawDataLen() + size);
             rawPacket->insertData(offset, new_bytes, size);
             myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             delete[] new_bytes;
@@ -107,6 +110,9 @@ MainWindow::MainWindow(QWidget *parent)
             ui->lineEdit->clear();
             ui->tableWidget->clear();
             ui->tableWidget->setRowCount(0);
+            myHexEdit.editor.data().clear();
+            enableMenuButtons(this, true);
+            enableHexEditButtons(this, false);
             ppp = new PcapPlusPlus(fileName.toStdString());
             if (ppp) emit processPcap();
         }
@@ -132,9 +138,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->actionSave, &QAction::triggered, this, [&](bool){
         if (ppp) {
-            QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"));
+            QString selectedFilter;
+            QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"), &selectedFilter);
             if (fileName.length() > 0) {
-                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), pcpp::LINKTYPE_ETHERNET);
+                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString() + ".pcap", ppp->getLinkLayer());
                 if (!pcapWriter.open())
                     throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
                 {
@@ -225,7 +232,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(ui->tableWidget, &QTableWidget::itemSelectionChanged, this, [&]() {
-        enableButtons(this, ui->tableWidget->selectedItems().size() > 0, true);
+        enableHexEditButtons(this, ui->tableWidget->selectedItems().size() > 0);
         if (ui->tableWidget->selectedItems().size() == 0 && myHexEdit.editor.data().size() > 0)
             myHexEdit.editor.setData(QByteArray());
     });
@@ -238,6 +245,7 @@ MainWindow::MainWindow(QWidget *parent)
         auto cursorData = myHexEdit.editor.dataAt(cursorPos, 1);
         if (myHexEdit.editor.cursorPosition() % 2 != 0 && myHexEdit.editor.cursorPosition() / 2 == myHexEdit.editor.data().size() - 1) {
             const uint8_t new_byte = 0x00;
+            rawPacket->reallocateData(rawPacket->getRawDataLen() + 1);
             rawPacket->insertData(rawPacket->getRawDataLen(), &new_byte, sizeof(new_byte));
             myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket->getRawData()), rawPacket->getRawDataLen()));
             myHexEdit.editor.setCursorPosition(cursorPos * 2 + 1);
@@ -256,7 +264,7 @@ MainWindow::~MainWindow()
 pcpp::RawPacket* MainWindow::currentSelectedPacket()
 {
     const auto &selected = ui->tableWidget->selectedItems();
-    if (selected.empty())
+    if (!ppp || selected.empty())
         return nullptr;
 
     return &ppp->getRawPacket(selected.last()->row());

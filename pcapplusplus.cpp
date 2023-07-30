@@ -77,14 +77,24 @@ bool PcapPlusPlus::processPacket(pcpp::Packet & packet)
     return false;
 }
 
-pcpp::RawPacket &PcapPlusPlus::getRawPacket(size_t index)
+pcpp::RawPacket& PcapPlusPlus::getRawPacket(size_t index)
 {
     return rawPackets.at(index);
 }
 
-pcpp::Packet &PcapPlusPlus::getParsedPacket(size_t index)
+pcpp::Packet& PcapPlusPlus::getParsedPacket(size_t index)
 {
     return parsedPackets.at(index);
+}
+
+pcpp::LinkLayerType PcapPlusPlus::getLinkLayer()
+{
+    const auto& pcap_file_reader = dynamic_cast<pcpp::PcapFileReaderDevice*>(reader);
+
+    if (pcap_file_reader)
+        return pcap_file_reader->getLinkLayerType();
+    else
+        return pcpp::LinkLayerType::LINKTYPE_NULL;
 }
 
 std::vector<pcpp::RawPacket>::iterator PcapPlusPlus::rawPacketsBegin()

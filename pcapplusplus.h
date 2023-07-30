@@ -14,8 +14,9 @@ public:
     void closePcap();
     bool setFilter(QString filter);
     bool processPacket(pcpp::Packet & packet);
-    pcpp::RawPacket &getRawPacket(size_t index);
-    pcpp::Packet &getParsedPacket(size_t index);
+    pcpp::RawPacket& getRawPacket(size_t index);
+    pcpp::Packet& getParsedPacket(size_t index);
+    pcpp::LinkLayerType getLinkLayer();
     std::vector<pcpp::RawPacket>::iterator rawPacketsBegin();
     std::vector<pcpp::RawPacket>::iterator rawPacketsEnd();
     std::vector<pcpp::Packet>::iterator parsedPacketsBegin();
