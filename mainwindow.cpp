@@ -8,15 +8,21 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , tableContextMenu()
     , myHexEdit()
     , ui(new Ui::MainWindow)
     , ppp(nullptr)
 {
     ui->setupUi(this);
     ui->gridLayout->addWidget(&myHexEdit.editor);
+    ui->tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
+    const auto& enableTableButtons = [](MainWindow *mainwindow, bool enable) {
+        mainwindow->tableContextMenu.randomize.setEnabled(enable);
+    };
     const auto& enableMenuButtons = [](MainWindow *mainwindow, bool enable) {
         mainwindow->ui->actionSave->setEnabled(enable);
+        mainwindow->ui->actionSave_Selection->setEnabled(enable);
     };
     const auto& enableHexEditButtons = [](MainWindow *mainwindow, bool enable) {
         mainwindow->myHexEdit.prependBytes.setEnabled(enable);
@@ -24,8 +30,23 @@ MainWindow::MainWindow(QWidget *parent)
         mainwindow->myHexEdit.deleteBytes.setEnabled(enable);
         mainwindow->myHexEdit.deleteSelection.setEnabled(enable);
     };
+    enableTableButtons(this, false);
     enableMenuButtons(this, false);
     enableHexEditButtons(this, false);
+
+    const auto& isIpColumn = [this](const int& column) {
+        switch (column) {
+        case 8:
+            return std::make_tuple(true, false);
+        case 9:
+            return std::make_tuple(false, true);
+        default:
+            return std::make_tuple(false, false);
+        }
+    };
+
+    tableContextMenu.randomize.setText("Randomize");
+    tableContextMenu.menu.addAction(&tableContextMenu.randomize);
 
     myHexEdit.editor.setContextMenuPolicy(Qt::CustomContextMenu);
     myHexEdit.prependBytes.setText("Prepend byte(s)..");
@@ -36,6 +57,32 @@ MainWindow::MainWindow(QWidget *parent)
     myHexEdit.contextMenu.addAction(&myHexEdit.appendBytes);
     myHexEdit.contextMenu.addAction(&myHexEdit.deleteBytes);
     myHexEdit.contextMenu.addAction(&myHexEdit.deleteSelection);
+
+    connect(&tableContextMenu.randomize, &QAction::triggered, this, [this, isIpColumn](bool checked __attribute__((unused))){
+        if (!ppp)
+            throw std::runtime_error("Can not randomize, no packets available");
+
+        const auto & row = ui->tableWidget->currentRow();
+        const auto & ipColumn = isIpColumn(ui->tableWidget->currentColumn() + 1);
+
+        if (std::get<0>(ipColumn) || std::get<1>(ipColumn)) {
+            ppp->randomizeIp(row, std::get<0>(ipColumn));
+            if (!MainWindow::setTableRow(row, ppp->getParsedPacket(row)))
+                throw std::runtime_error("BUG: Could not change table row");
+        } else throw std::runtime_error("BUG: No IP column selected");
+    });
+
+    connect(ui->tableWidget, &QTableWidget::customContextMenuRequested, this, [this, enableTableButtons, isIpColumn](const QPoint& pos){
+        const auto & globalPos = ui->tableWidget->viewport()->mapToGlobal(pos);
+        const auto & ipColumn = isIpColumn(ui->tableWidget->columnAt(pos.x()) + 1);
+
+        if ((std::get<0>(ipColumn) || std::get<1>(ipColumn)) && ppp)
+            enableTableButtons(this, true);
+        else
+            enableTableButtons(this, false);
+
+        tableContextMenu.menu.popup(globalPos);
+    });
 
     connect(&myHexEdit.bytewindow, &QDialog::finished, this, [&](int result) {
         if (result == 0)
@@ -105,8 +152,8 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
-    connect(ui->actionOpen, &QAction::triggered, this, [this, enableMenuButtons, enableHexEditButtons](bool){
-        QString fileName = QFileDialog::getOpenFileName(this, tr("Open PCAP File"), "", tr("PCAP Files (*.pcap)"));
+    connect(ui->actionOpen, &QAction::triggered, this, [this, enableTableButtons, enableMenuButtons, enableHexEditButtons](bool){
+        QString fileName = QFileDialog::getOpenFileName(this, tr("Open PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"));
         if (fileName.length() > 0) {
             if (ppp) {
                 delete ppp;
@@ -116,8 +163,10 @@ MainWindow::MainWindow(QWidget *parent)
             ui->tableWidget->clear();
             ui->tableWidget->setRowCount(0);
             myHexEdit.editor.data().data_ptr()->clear();
+            enableTableButtons(this, true);
             enableMenuButtons(this, true);
             enableHexEditButtons(this, false);
+            ui->actionSave_Selection->setEnabled(false);
             ppp = new PcapPlusPlus(fileName.toStdString());
             if (ppp) emit processPcap();
         }
@@ -142,19 +191,39 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(ui->actionSave, &QAction::triggered, this, [&](bool){
-        if (ppp) {
-            QString selectedFilter;
-            QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap)"), &selectedFilter);
-            if (fileName.length() > 0) {
-                pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), ppp->getLinkLayer());
-                if (!pcapWriter.open())
-                    throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
-                {
-                    for (auto rawPacket = ppp->rawPacketsBegin(); rawPacket < ppp->rawPacketsEnd(); rawPacket++) {
-                        pcapWriter.writePacket(*rawPacket);
-                    }
-                    pcapWriter.flush();
+        if (!ppp)
+            return;
+
+        QString selectedFilter;
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"), &selectedFilter);
+        if (fileName.length() > 0) {
+            pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), ppp->getLinkLayer());
+            if (!pcapWriter.open())
+                throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
+            {
+                for (auto rawPacket = ppp->rawPacketsBegin(); rawPacket < ppp->rawPacketsEnd(); rawPacket++) {
+                    pcapWriter.writePacket(*rawPacket);
                 }
+                pcapWriter.flush();
+            }
+        }
+    });
+
+    connect(ui->actionSave_Selection, &QAction::triggered, this, [&](bool){
+        if (!ppp)
+            return;
+
+        QString selectedFilter;
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"), &selectedFilter);
+        if (fileName.length() > 0) {
+            pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), ppp->getLinkLayer());
+            if (!pcapWriter.open())
+                throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
+            {
+                for (const auto & selected : ui->tableWidget->selectedRanges()) {
+                    pcapWriter.writePacket(ppp->getRawPacket(selected.topRow()));
+                }
+                pcapWriter.flush();
             }
         }
     });
@@ -177,55 +246,8 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(this, &MainWindow::onPacketAvailable, this, [&](const pcpp::Packet& packet) {
-        ui->tableWidget->insertRow(ui->tableWidget->rowCount());
-
-        QTableWidgetItem* itemRelativeTime =new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 0, itemRelativeTime);
-
-        QTableWidgetItem* itemFrameLength = new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getFrameLength()));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 1, itemFrameLength);
-
-        const auto *firstLayer = PcapPlusPlus::getFirstLayer(packet);
-
-        QTableWidgetItem* itemFirstLayerProtocol = new QTableWidgetItem(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 2, itemFirstLayerProtocol);
-
-        const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
-
-        QTableWidgetItem* itemSecondLayerProtocol = new QTableWidgetItem(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 3, itemSecondLayerProtocol);
-
-        const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
-
-        QTableWidgetItem* itemThirdLayerProtocol = new QTableWidgetItem(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 4, itemThirdLayerProtocol);
-
-        const auto ethTuple = PcapPlusPlus::getEthTuple(packet);
-
-        QTableWidgetItem* itemSrcMac = new QTableWidgetItem(tr("%1").arg(std::get<0>(ethTuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 5, itemSrcMac);
-
-        QTableWidgetItem* itemDstMac = new QTableWidgetItem(tr("%1").arg(std::get<1>(ethTuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 6, itemDstMac);
-
-        const auto ipTuple = PcapPlusPlus::getIpTuple(packet);
-
-        QTableWidgetItem* itemSrcIp = new QTableWidgetItem(tr("%1").arg(std::get<0>(ipTuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 7, itemSrcIp);
-
-        QTableWidgetItem* itemDstIp = new QTableWidgetItem(tr("%1").arg(std::get<1>(ipTuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 8, itemDstIp);
-
-        const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(packet);
-
-        QTableWidgetItem* itemSrcPort = new QTableWidgetItem(tr("%1").arg(std::get<0>(l4Tuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 9, itemSrcPort);
-
-        QTableWidgetItem* itemDstPort = new QTableWidgetItem(tr("%1").arg(std::get<1>(l4Tuple)));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 10, itemDstPort);
-
-        QTableWidgetItem* itemDesc = new QTableWidgetItem(tr("%1").arg(QString::fromStdString(thirdLayer ? thirdLayer->toString() : (secondLayer ? secondLayer->toString() : (firstLayer ? firstLayer->toString() : "")))));
-        ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 11, itemDesc);
+        if (!addTableRow(packet))
+            throw std::runtime_error("Could not add row to table for packet: " + packet.toString());
     });
 
     connect(ui->tableWidget, &QTableWidget::cellPressed, this, [&] {
@@ -237,8 +259,9 @@ MainWindow::MainWindow(QWidget *parent)
         myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
     });
 
-    connect(ui->tableWidget, &QTableWidget::itemSelectionChanged, this, [&]() {
+    connect(ui->tableWidget, &QTableWidget::itemSelectionChanged, this, [this, enableHexEditButtons]() {
         enableHexEditButtons(this, ui->tableWidget->selectedItems().size() > 0);
+        ui->actionSave_Selection->setEnabled(ui->tableWidget->selectedItems().size() > 0);
         if (ui->tableWidget->selectedItems().size() == 0 && myHexEdit.editor.data().size() > 0)
             myHexEdit.editor.setData(QByteArray());
     });
@@ -274,4 +297,93 @@ pcpp::RawPacket* MainWindow::currentSelectedPacket()
         return nullptr;
 
     return &ppp->getRawPacket(selected.last()->row());
+}
+
+bool MainWindow::addTableRow(const pcpp::Packet& packet)
+{
+    const auto *firstLayer = PcapPlusPlus::getFirstLayer(packet);
+    const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
+    const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
+    const auto ethTuple = PcapPlusPlus::getEthTuple(packet);
+    const auto ipTuple = PcapPlusPlus::getIpTuple(packet);
+    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(packet);
+
+    if (!firstLayer)
+        return false;
+
+    QTableWidgetItem* itemRelativeTime = new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
+    QTableWidgetItem* itemFrameLength = new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getFrameLength()));
+    QTableWidgetItem* itemFirstLayerProtocol = new QTableWidgetItem(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
+    QTableWidgetItem* itemSecondLayerProtocol = new QTableWidgetItem(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
+    QTableWidgetItem* itemThirdLayerProtocol = new QTableWidgetItem(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));
+    QTableWidgetItem* itemSrcMac = new QTableWidgetItem(tr("%1").arg(std::get<0>(ethTuple)));
+    QTableWidgetItem* itemDstMac = new QTableWidgetItem(tr("%1").arg(std::get<1>(ethTuple)));
+    QTableWidgetItem* itemSrcIp = new QTableWidgetItem(tr("%1").arg(std::get<0>(ipTuple)));
+    QTableWidgetItem* itemDstIp = new QTableWidgetItem(tr("%1").arg(std::get<1>(ipTuple)));
+    QTableWidgetItem* itemSrcPort = new QTableWidgetItem(tr("%1").arg(std::get<0>(l4Tuple)));
+    QTableWidgetItem* itemDstPort = new QTableWidgetItem(tr("%1").arg(std::get<1>(l4Tuple)));
+    QTableWidgetItem* itemDesc = new QTableWidgetItem(tr("%1").arg(QString::fromStdString(thirdLayer ? thirdLayer->toString() : (secondLayer ? secondLayer->toString() : (firstLayer ? firstLayer->toString() : "")))));
+
+    if (!itemRelativeTime || !itemFrameLength || !itemFirstLayerProtocol || !itemSecondLayerProtocol || !itemThirdLayerProtocol
+        || !itemSrcMac || !itemDstMac || !itemSrcIp || !itemDstIp || !itemSrcPort || ! itemDstPort || !itemDesc)
+    {
+        delete itemRelativeTime;
+        delete itemFrameLength;
+        delete itemFirstLayerProtocol;
+        delete itemSecondLayerProtocol;
+        delete itemThirdLayerProtocol;
+        delete itemSrcMac;
+        delete itemDstMac;
+        delete itemSrcIp;
+        delete itemDstIp;
+        delete itemSrcPort;
+        delete itemDstPort;
+        delete itemDesc;
+
+        return false;
+    }
+
+    ui->tableWidget->insertRow(ui->tableWidget->rowCount());
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 0, itemRelativeTime);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 1, itemFrameLength);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 2, itemFirstLayerProtocol);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 3, itemSecondLayerProtocol);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 4, itemThirdLayerProtocol);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 5, itemSrcMac);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 6, itemDstMac);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 7, itemSrcIp);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 8, itemDstIp);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 9, itemSrcPort);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 10, itemDstPort);
+    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 11, itemDesc);
+
+    return true;
+}
+
+bool MainWindow::setTableRow(size_t index, const pcpp::Packet& packet)
+{
+    const auto *firstLayer = PcapPlusPlus::getFirstLayer(packet);
+    const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
+    const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
+    const auto ethTuple = PcapPlusPlus::getEthTuple(packet);
+    const auto ipTuple = PcapPlusPlus::getIpTuple(packet);
+    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(packet);
+
+    if (!firstLayer)
+        return false;
+
+    ui->tableWidget->item(index, 0)->setText(tr("%1").arg(packet.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
+    ui->tableWidget->item(index, 1)->setText(tr("%1").arg(packet.getRawPacket()->getFrameLength()));
+    ui->tableWidget->item(index, 2)->setText(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
+    ui->tableWidget->item(index, 3)->setText(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
+    ui->tableWidget->item(index, 4)->setText(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));
+    ui->tableWidget->item(index, 5)->setText(tr("%1").arg(std::get<0>(ethTuple)));
+    ui->tableWidget->item(index, 6)->setText(tr("%1").arg(std::get<1>(ethTuple)));
+    ui->tableWidget->item(index, 7)->setText(tr("%1").arg(std::get<0>(ipTuple)));
+    ui->tableWidget->item(index, 8)->setText(tr("%1").arg(std::get<1>(ipTuple)));
+    ui->tableWidget->item(index, 9)->setText(tr("%1").arg(std::get<0>(l4Tuple)));
+    ui->tableWidget->item(index, 10)->setText(tr("%1").arg(std::get<1>(l4Tuple)));
+    ui->tableWidget->item(index, 11)->setText(tr("%1").arg(QString::fromStdString(thirdLayer ? thirdLayer->toString() : (secondLayer ? secondLayer->toString() : (firstLayer ? firstLayer->toString() : "")))));
+
+    return true;
 }

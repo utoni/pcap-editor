@@ -107,6 +107,7 @@ border-color: beige;</string>
     </property>
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
+    <addaction name="actionSave_Selection"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -119,6 +120,11 @@ border-color: beige;</string>
   <action name="actionSave">
    <property name="text">
     <string>Save</string>
+   </property>
+  </action>
+  <action name="actionSave_Selection">
+   <property name="text">
+    <string>Save Selection</string>
    </property>
   </action>
  </widget>

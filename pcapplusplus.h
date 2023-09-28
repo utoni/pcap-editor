@@ -21,6 +21,7 @@ public:
     std::vector<pcpp::RawPacket>::iterator rawPacketsEnd();
     std::vector<pcpp::Packet>::iterator parsedPacketsBegin();
     std::vector<pcpp::Packet>::iterator parsedPacketsEnd();
+    bool randomizeIp(size_t index, bool isSourceIp);
     bool getPcapStatistics(pcpp::IFileDevice::PcapStats & stats);
 
     static const pcpp::Layer *getFirstLayer(const pcpp::Packet & packet);

@@ -1,9 +1,13 @@
 #include "pcapplusplus.h"
 
+#include <chrono>
 #include <EthLayer.h>
 #include <exception>
 #include <IPLayer.h>
+#include <IPv4Layer.h>
+#include <IPv6Layer.h>
 #include <TcpLayer.h>
+#include <random>
 #include <tuple>
 #include <UdpLayer.h>
 
@@ -115,6 +119,46 @@ std::vector<pcpp::Packet>::iterator PcapPlusPlus::parsedPacketsBegin()
 std::vector<pcpp::Packet>::iterator PcapPlusPlus::parsedPacketsEnd()
 {
     return parsedPackets.end();
+}
+
+bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
+{
+    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    auto retval = false;
+    pcpp::RawPacket rawPacket(getRawPacket(index));
+    pcpp::Packet parsedPacket(&rawPacket);
+    auto * ip4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
+    auto * ip6Layer = parsedPacket.getLayerOfType<pcpp::IPv6Layer>();
+
+    if (ip4Layer) {
+        std::uniform_int_distribution<unsigned int> ip4Distribution(0, 0xFFFFFFFF);
+
+        if (isSourceIp)
+            ip4Layer->setSrcIPv4Address(pcpp::IPv4Address(ip4Distribution(generator)));
+        else
+            ip4Layer->setDstIPv4Address(pcpp::IPv4Address(ip4Distribution(generator)));
+
+        retval = true;
+    }
+
+    if (ip6Layer) {
+        std::uniform_int_distribution<unsigned long long int> ip6Distribution(0, 0xFFFFFFFFFFFFFFFF);
+        unsigned long long int newIp6Addr[2] { ip6Distribution(generator), ip6Distribution(generator) };
+
+        if (isSourceIp)
+            ip6Layer->setSrcIPv6Address(reinterpret_cast<uint8_t *>(newIp6Addr));
+        else
+            ip6Layer->setDstIPv6Address(reinterpret_cast<uint8_t *>(newIp6Addr));
+
+        retval = true;
+    }
+
+    rawPackets.erase(rawPackets.cbegin() + index);
+    rawPackets.insert(rawPackets.cbegin() + index, rawPacket);
+    parsedPackets.erase(parsedPackets.cbegin() + index);
+    parsedPackets.insert(parsedPackets.cbegin() + index, parsedPacket);
+
+    return retval;
 }
 
 bool PcapPlusPlus::getPcapStatistics(pcpp::IFileDevice::PcapStats & stats)

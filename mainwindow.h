@@ -21,7 +21,15 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     pcpp::RawPacket* currentSelectedPacket();
+    bool addTableRow(const pcpp::Packet& packet);
+    bool setTableRow(size_t index, const pcpp::Packet& packet);
+
 private:
+    struct {
+        QMenu menu;
+        QAction randomize;
+    } tableContextMenu;
+
     struct {
         QMenu contextMenu;
         QAction prependBytes;
@@ -33,8 +41,8 @@ private:
     } myHexEdit;
 
     time_t firstPacketTs;
-    PcapPlusPlus *ppp;
     Ui::MainWindow *ui;
+    PcapPlusPlus *ppp;
 
 signals:
     void processPcap();
