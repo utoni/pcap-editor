@@ -21,8 +21,8 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     pcpp::RawPacket* currentSelectedPacket();
-    bool addTableRow(const pcpp::Packet& packet);
-    bool setTableRow(size_t index, const pcpp::Packet& packet);
+    bool addTableRow();
+    bool updateTableRow(size_t index);
 
 private:
     struct {
@@ -46,6 +46,6 @@ private:
 
 signals:
     void processPcap();
-    void onPacketAvailable(const pcpp::Packet& packet);
+    void onPacketAvailable();
 };
 #endif // MAINWINDOW_H

@@ -67,9 +67,18 @@ MainWindow::MainWindow(QWidget *parent)
 
         if (std::get<0>(ipColumn) || std::get<1>(ipColumn)) {
             ppp->randomizeIp(row, std::get<0>(ipColumn));
-            if (!MainWindow::setTableRow(row, ppp->getParsedPacket(row)))
+            if (!MainWindow::updateTableRow(row))
                 throw std::runtime_error("BUG: Could not change table row");
         } else throw std::runtime_error("BUG: No IP column selected");
+    });
+
+    connect(ui->tableWidget, &QTableWidget::itemChanged, this, [this, isIpColumn](QTableWidgetItem *item) {
+        if (!item)
+            return;
+
+        const auto & ipColumn = isIpColumn(ui->tableWidget->currentColumn() + 1);
+        if (std::get<0>(ipColumn) || std::get<1>(ipColumn))
+            ppp->setIp(ui->tableWidget->currentRow(), item->text().toStdString(), std::get<0>(ipColumn));
     });
 
     connect(ui->tableWidget, &QTableWidget::customContextMenuRequested, this, [this, enableTableButtons, isIpColumn](const QPoint& pos){
@@ -243,7 +252,7 @@ MainWindow::MainWindow(QWidget *parent)
         while (ppp->processPacket(packet)) {
             if (!firstPacketTs)
                 firstPacketTs = packet.getRawPacket()->getPacketTimeStamp().tv_sec;
-            emit onPacketAvailable(packet);
+            emit onPacketAvailable();
         }
         pcpp::PcapFileReaderDevice::PcapStats stats;
         if (ppp->getPcapStatistics(stats))
@@ -253,9 +262,9 @@ MainWindow::MainWindow(QWidget *parent)
             ui->statusbar->showMessage("No PCAP statistics available.");
     });
 
-    connect(this, &MainWindow::onPacketAvailable, this, [&](const pcpp::Packet& packet) {
-        if (!addTableRow(packet))
-            throw std::runtime_error("Could not add row to table for packet: " + packet.toString());
+    connect(this, &MainWindow::onPacketAvailable, this, [&]() {
+        if (!addTableRow())
+            throw std::runtime_error("Could not add row to table for packet");
     });
 
     connect(ui->tableWidget, &QTableWidget::cellPressed, this, [&] {
@@ -307,30 +316,20 @@ pcpp::RawPacket* MainWindow::currentSelectedPacket()
     return &ppp->getRawPacket(selected.last()->row());
 }
 
-bool MainWindow::addTableRow(const pcpp::Packet& packet)
+bool MainWindow::addTableRow()
 {
-    const auto *firstLayer = PcapPlusPlus::getFirstLayer(packet);
-    const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
-    const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
-    const auto ethTuple = PcapPlusPlus::getEthTuple(packet);
-    const auto ipTuple = PcapPlusPlus::getIpTuple(packet);
-    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(packet);
-
-    if (!firstLayer)
-        return false;
-
-    QTableWidgetItem* itemRelativeTime = new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
-    QTableWidgetItem* itemFrameLength = new QTableWidgetItem(tr("%1").arg(packet.getRawPacket()->getFrameLength()));
-    QTableWidgetItem* itemFirstLayerProtocol = new QTableWidgetItem(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
-    QTableWidgetItem* itemSecondLayerProtocol = new QTableWidgetItem(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
-    QTableWidgetItem* itemThirdLayerProtocol = new QTableWidgetItem(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));
-    QTableWidgetItem* itemSrcMac = new QTableWidgetItem(tr("%1").arg(std::get<0>(ethTuple)));
-    QTableWidgetItem* itemDstMac = new QTableWidgetItem(tr("%1").arg(std::get<1>(ethTuple)));
-    QTableWidgetItem* itemSrcIp = new QTableWidgetItem(tr("%1").arg(std::get<0>(ipTuple)));
-    QTableWidgetItem* itemDstIp = new QTableWidgetItem(tr("%1").arg(std::get<1>(ipTuple)));
-    QTableWidgetItem* itemSrcPort = new QTableWidgetItem(tr("%1").arg(std::get<0>(l4Tuple)));
-    QTableWidgetItem* itemDstPort = new QTableWidgetItem(tr("%1").arg(std::get<1>(l4Tuple)));
-    QTableWidgetItem* itemDesc = new QTableWidgetItem(tr("%1").arg(QString::fromStdString(thirdLayer ? thirdLayer->toString() : (secondLayer ? secondLayer->toString() : (firstLayer ? firstLayer->toString() : "")))));
+    QTableWidgetItem* itemRelativeTime = new QTableWidgetItem();
+    QTableWidgetItem* itemFrameLength = new QTableWidgetItem();
+    QTableWidgetItem* itemFirstLayerProtocol = new QTableWidgetItem();
+    QTableWidgetItem* itemSecondLayerProtocol = new QTableWidgetItem();
+    QTableWidgetItem* itemThirdLayerProtocol = new QTableWidgetItem();
+    QTableWidgetItem* itemSrcMac = new QTableWidgetItem();
+    QTableWidgetItem* itemDstMac = new QTableWidgetItem();
+    QTableWidgetItem* itemSrcIp = new QTableWidgetItem();
+    QTableWidgetItem* itemDstIp = new QTableWidgetItem();
+    QTableWidgetItem* itemSrcPort = new QTableWidgetItem();
+    QTableWidgetItem* itemDstPort = new QTableWidgetItem();
+    QTableWidgetItem* itemDesc = new QTableWidgetItem();
 
     if (!itemRelativeTime || !itemFrameLength || !itemFirstLayerProtocol || !itemSecondLayerProtocol || !itemThirdLayerProtocol
         || !itemSrcMac || !itemDstMac || !itemSrcIp || !itemDstIp || !itemSrcPort || ! itemDstPort || !itemDesc)
@@ -365,23 +364,39 @@ bool MainWindow::addTableRow(const pcpp::Packet& packet)
     ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 10, itemDstPort);
     ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 11, itemDesc);
 
-    return true;
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 0)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 1)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 2)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 3)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 4)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 5)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 6)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 9)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 10)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 11)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+
+    return updateTableRow(ui->tableWidget->rowCount() - 1);
 }
 
-bool MainWindow::setTableRow(size_t index, const pcpp::Packet& packet)
+bool MainWindow::updateTableRow(size_t index)
 {
-    const auto *firstLayer = PcapPlusPlus::getFirstLayer(packet);
+    if (!ppp)
+        return false;
+
+    auto parsedPacket = pcpp::Packet(&ppp->getRawPacket(index));
+    const auto *firstLayer = PcapPlusPlus::getFirstLayer(parsedPacket);
     const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
     const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
-    const auto ethTuple = PcapPlusPlus::getEthTuple(packet);
-    const auto ipTuple = PcapPlusPlus::getIpTuple(packet);
-    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(packet);
+    const auto ethTuple = PcapPlusPlus::getEthTuple(parsedPacket);
+    const auto ipTuple = PcapPlusPlus::getIpTuple(parsedPacket);
+    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(parsedPacket);
 
     if (!firstLayer)
         return false;
 
-    ui->tableWidget->item(index, 0)->setText(tr("%1").arg(packet.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
-    ui->tableWidget->item(index, 1)->setText(tr("%1").arg(packet.getRawPacket()->getFrameLength()));
+    ui->tableWidget->item(index, 0)->setText(tr("%1").arg(parsedPacket.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
+    ui->tableWidget->item(index, 1)->setText(tr("%1").arg(parsedPacket.getRawPacket()->getFrameLength()));
     ui->tableWidget->item(index, 2)->setText(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
     ui->tableWidget->item(index, 3)->setText(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
     ui->tableWidget->item(index, 4)->setText(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));

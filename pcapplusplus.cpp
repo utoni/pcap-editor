@@ -152,10 +152,45 @@ bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
         retval = true;
     }
 
-    parsedPackets.at(index) = parsedPacket;
+    parsedPackets[index] = parsedPacket;
 
     return retval;
 }
+
+bool PcapPlusPlus::setIp(size_t index, const std::string & ip, bool isSourceIp)
+{
+    auto retval = false;
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * ip4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
+    auto * ip6Layer = parsedPacket.getLayerOfType<pcpp::IPv6Layer>();
+
+    if (ip4Layer) {
+        pcpp::IPv4Address addr(ip);
+
+        if (isSourceIp)
+            ip4Layer->getIPv4Header()->ipSrc = addr.toInt();
+        else
+            ip4Layer->getIPv4Header()->ipDst = addr.toInt();
+
+        retval = true;
+    }
+
+    if (ip6Layer) {
+        pcpp::IPv6Address addr(ip);
+
+        if (isSourceIp)
+            std::memcpy(ip6Layer->getIPv6Header()->ipSrc, addr.toBytes(), 16);
+        else
+            std::memcpy(ip6Layer->getIPv6Header()->ipDst, addr.toBytes(), 16);
+
+        retval = true;
+    }
+
+    parsedPackets[index] = parsedPacket;
+
+    return retval;
+}
+
 
 bool PcapPlusPlus::getPcapStatistics(pcpp::IFileDevice::PcapStats & stats)
 {
