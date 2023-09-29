@@ -155,11 +155,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionOpen, &QAction::triggered, this, [this, enableTableButtons, enableMenuButtons, enableHexEditButtons](bool){
         QString fileName = QFileDialog::getOpenFileName(this, tr("Open PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"));
         if (fileName.length() > 0) {
-            if (ppp) {
-                delete ppp;
-                ppp = nullptr;
-            }
             ui->lineEdit->clear();
+            ui->tableWidget->clearSelection();
             ui->tableWidget->clear();
             ui->tableWidget->setRowCount(0);
             myHexEdit.editor.data().data_ptr()->clear();
@@ -167,6 +164,11 @@ MainWindow::MainWindow(QWidget *parent)
             enableMenuButtons(this, true);
             enableHexEditButtons(this, false);
             ui->actionSave_Selection->setEnabled(false);
+
+            if (ppp) {
+                delete ppp;
+                ppp = nullptr;
+            }
             ppp = new PcapPlusPlus(fileName.toStdString());
             if (ppp) emit processPcap();
         }
@@ -205,6 +207,7 @@ MainWindow::MainWindow(QWidget *parent)
                     pcapWriter.writePacket(*rawPacket);
                 }
                 pcapWriter.flush();
+                pcapWriter.close();
             }
         }
     });
@@ -220,10 +223,15 @@ MainWindow::MainWindow(QWidget *parent)
             if (!pcapWriter.open())
                 throw std::runtime_error("Could not open file " + fileName.toStdString() + " for writing.");
             {
-                for (const auto & selected : ui->tableWidget->selectedRanges()) {
+                QList<QTableWidgetSelectionRange> selection(ui->tableWidget->selectedRanges());
+                std::sort(selection.begin(), selection.end(), [](const QTableWidgetSelectionRange & a, const QTableWidgetSelectionRange & b){
+                    return a.topRow() < b.topRow();
+                });
+                for (const auto & selected : selection) {
                     pcapWriter.writePacket(ppp->getRawPacket(selected.topRow()));
                 }
                 pcapWriter.flush();
+                pcapWriter.close();
             }
         }
     });

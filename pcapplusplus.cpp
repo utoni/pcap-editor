@@ -125,8 +125,7 @@ bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
 {
     std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
     auto retval = false;
-    pcpp::RawPacket rawPacket(getRawPacket(index));
-    pcpp::Packet parsedPacket(&rawPacket);
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
     auto * ip4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
     auto * ip6Layer = parsedPacket.getLayerOfType<pcpp::IPv6Layer>();
 
@@ -134,9 +133,9 @@ bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
         std::uniform_int_distribution<unsigned int> ip4Distribution(0, 0xFFFFFFFF);
 
         if (isSourceIp)
-            ip4Layer->setSrcIPv4Address(pcpp::IPv4Address(ip4Distribution(generator)));
+            ip4Layer->getIPv4Header()->ipSrc = pcpp::IPv4Address(ip4Distribution(generator)).toInt();
         else
-            ip4Layer->setDstIPv4Address(pcpp::IPv4Address(ip4Distribution(generator)));
+            ip4Layer->getIPv4Header()->ipDst = pcpp::IPv4Address(ip4Distribution(generator)).toInt();
 
         retval = true;
     }
@@ -146,17 +145,14 @@ bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
         unsigned long long int newIp6Addr[2] { ip6Distribution(generator), ip6Distribution(generator) };
 
         if (isSourceIp)
-            ip6Layer->setSrcIPv6Address(reinterpret_cast<uint8_t *>(newIp6Addr));
+            std::memcpy(ip6Layer->getIPv6Header()->ipSrc, reinterpret_cast<uint8_t *>(newIp6Addr), 16);
         else
-            ip6Layer->setDstIPv6Address(reinterpret_cast<uint8_t *>(newIp6Addr));
+            std::memcpy(ip6Layer->getIPv6Header()->ipDst, reinterpret_cast<uint8_t *>(newIp6Addr), 16);
 
         retval = true;
     }
 
-    rawPackets.erase(rawPackets.cbegin() + index);
-    rawPackets.insert(rawPackets.cbegin() + index, rawPacket);
-    parsedPackets.erase(parsedPackets.cbegin() + index);
-    parsedPackets.insert(parsedPackets.cbegin() + index, parsedPacket);
+    parsedPackets.at(index) = parsedPacket;
 
     return retval;
 }
