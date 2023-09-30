@@ -5,6 +5,7 @@
 #include "pcapplusplus.h"
 #include "qhexedit2/src/qhexedit.h"
 
+#include <atomic>
 #include <optional>
 #include <QMainWindow>
 #include <QMenu>
@@ -25,6 +26,9 @@ public:
     bool updateTableRow(size_t index);
 
 private:
+    bool eventFilter(QObject *obj, QEvent *event);
+    void updateStatusBarMessage(const QString & message);
+
     struct {
         QMenu menu;
         QAction randomize;
@@ -37,12 +41,19 @@ private:
         QAction deleteBytes;
         QAction deleteSelection;
         QHexEdit editor;
-        ByteWindow bytewindow;
+        ByteWindow *bytewindow = nullptr;
     } myHexEdit;
 
-    time_t firstPacketTs;
-    Ui::MainWindow *ui;
-    PcapPlusPlus *ppp;
+    struct {
+        int x;
+        int y;
+    } mouse;
+
+    time_t firstPacketTs = 0;
+    Ui::MainWindow *ui = nullptr;
+    QString statusbarMessage;
+    PcapPlusPlus *ppp = nullptr;
+    std::atomic<bool> isProcessing = false;
 
 signals:
     void processPcap();

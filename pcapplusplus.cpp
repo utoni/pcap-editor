@@ -6,8 +6,9 @@
 #include <IPLayer.h>
 #include <IPv4Layer.h>
 #include <IPv6Layer.h>
-#include <TcpLayer.h>
 #include <random>
+#include <SystemUtils.h>
+#include <TcpLayer.h>
 #include <tuple>
 #include <UdpLayer.h>
 
@@ -121,6 +122,30 @@ std::vector<pcpp::Packet>::iterator PcapPlusPlus::parsedPacketsEnd()
     return parsedPackets.end();
 }
 
+bool PcapPlusPlus::randomizeEth(size_t index, bool isSourceEth)
+{
+    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    auto retval = false;
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * ethLayer = parsedPacket.getLayerOfType<pcpp::EthLayer>();
+
+    if (ethLayer) {
+        std::uniform_int_distribution<unsigned long long int> ethDistribution(0, 0xFFFFFFFFFFFFFFFF);
+        unsigned long long int newEthAddr = ethDistribution(generator);
+
+        if (isSourceEth)
+            std::memcpy(ethLayer->getEthHeader()->srcMac, reinterpret_cast<uint8_t *>(&newEthAddr), 6);
+        else
+            std::memcpy(ethLayer->getEthHeader()->dstMac, reinterpret_cast<uint8_t *>(&newEthAddr), 6);
+
+        retval = true;
+    }
+
+    parsedPackets[index] = parsedPacket;
+
+    return retval;
+}
+
 bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
 {
     std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
@@ -148,6 +173,60 @@ bool PcapPlusPlus::randomizeIp(size_t index, bool isSourceIp)
             std::memcpy(ip6Layer->getIPv6Header()->ipSrc, reinterpret_cast<uint8_t *>(newIp6Addr), 16);
         else
             std::memcpy(ip6Layer->getIPv6Header()->ipDst, reinterpret_cast<uint8_t *>(newIp6Addr), 16);
+
+        retval = true;
+    }
+
+    parsedPackets[index] = parsedPacket;
+
+    return retval;
+}
+
+bool PcapPlusPlus::randomizePort(size_t index, bool isSourcePort)
+{
+    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    auto retval = false;
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+    auto * tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
+    std::uniform_int_distribution<unsigned short> portDistribution(0, 0xFFFF);
+
+    if (udpLayer) {
+        if (isSourcePort)
+            udpLayer->getUdpHeader()->portSrc = portDistribution(generator);
+        else
+            udpLayer->getUdpHeader()->portDst = portDistribution(generator);
+
+        retval = true;
+    }
+
+    if (tcpLayer) {
+        if (isSourcePort)
+            tcpLayer->getTcpHeader()->portSrc = portDistribution(generator);
+        else
+            tcpLayer->getTcpHeader()->portDst = portDistribution(generator);
+
+        retval = true;
+    }
+
+    parsedPackets[index] = parsedPacket;
+
+    return retval;
+}
+
+bool PcapPlusPlus::setEth(size_t index, const std::string & eth, bool isSourceEth)
+{
+    auto retval = false;
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * ethLayer = parsedPacket.getLayerOfType<pcpp::EthLayer>();
+
+    if (ethLayer) {
+        pcpp::MacAddress mac(eth);
+
+        if (isSourceEth)
+            std::memcpy(ethLayer->getEthHeader()->srcMac, mac.getRawData(), 6);
+        else
+            std::memcpy(ethLayer->getEthHeader()->dstMac, mac.getRawData(), 6);
 
         retval = true;
     }
@@ -191,6 +270,36 @@ bool PcapPlusPlus::setIp(size_t index, const std::string & ip, bool isSourceIp)
     return retval;
 }
 
+bool PcapPlusPlus::setPort(size_t index, const std::string & port, bool isSourcePort)
+{
+    auto retval = false;
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+    auto * tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
+    const unsigned short portNum = pcpp::hostToNet16(std::stoi(port));
+
+    if (udpLayer) {
+        if (isSourcePort)
+            udpLayer->getUdpHeader()->portSrc = portNum;
+        else
+            udpLayer->getUdpHeader()->portDst = portNum;
+
+        retval = true;
+    }
+
+    if (tcpLayer) {
+        if (isSourcePort)
+            tcpLayer->getTcpHeader()->portSrc = portNum;
+        else
+            tcpLayer->getTcpHeader()->portDst = portNum;
+
+        retval = true;
+    }
+
+    parsedPackets[index] = parsedPacket;
+
+    return retval;
+}
 
 bool PcapPlusPlus::getPcapStatistics(pcpp::IFileDevice::PcapStats & stats)
 {

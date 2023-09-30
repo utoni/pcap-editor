@@ -21,8 +21,12 @@ public:
     std::vector<pcpp::RawPacket>::iterator rawPacketsEnd();
     std::vector<pcpp::Packet>::iterator parsedPacketsBegin();
     std::vector<pcpp::Packet>::iterator parsedPacketsEnd();
+    bool randomizeEth(size_t index, bool isSourceEth);
     bool randomizeIp(size_t index, bool isSourceIp);
+    bool randomizePort(size_t index, bool isSourcePort);
+    bool setEth(size_t index, const std::string & eth, bool isSourceIp);
     bool setIp(size_t index, const std::string & ip, bool isSourceIp);
+    bool setPort(size_t index, const std::string & port, bool isSourceIp);
     bool getPcapStatistics(pcpp::IFileDevice::PcapStats & stats);
 
     static const pcpp::Layer *getFirstLayer(const pcpp::Packet & packet);

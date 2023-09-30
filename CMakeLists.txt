@@ -45,6 +45,16 @@ if(ENABLE_SANITIZER)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined -fno-sanitize=alignment -fsanitize=enum -fsanitize=leak")
 endif()
 
+option(ENABLE_THREAD_SANITIZER "Enable TSAN." OFF)
+if(ENABLE_THREAD_SANITIZER)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+endif()
+
+if (ENABLE_SANITIZER AND ENABLE_THREAD_SANITIZER)
+    message(FATAL_ERROR "ENABLE_SANITIZER and ENABLE_THREAD_SANITIZER must not be enabled at the same time!")
+endif()
+
 set(PROJECT_SOURCES
         main.cpp
 
