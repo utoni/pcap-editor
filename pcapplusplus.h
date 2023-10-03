@@ -28,6 +28,7 @@ public:
     bool setIp(size_t index, const std::string & ip, bool isSourceIp);
     bool setPort(size_t index, const std::string & port, bool isSourceIp);
     bool getPcapStatistics(pcpp::IFileDevice::PcapStats & stats);
+    double getFirstPacketTimestamp() { return firstPacketTs; }
 
     static const pcpp::Layer *getFirstLayer(const pcpp::Packet & packet);
     static QString getProtocolTypeAsString(pcpp::ProtocolType protocolType);
@@ -36,7 +37,8 @@ public:
     static std::tuple<uint16_t, uint16_t> getLayer4Tuple(const pcpp::Packet & packet);
 
 private:
-    pcpp::IFileReaderDevice *reader;
+    double firstPacketTs = 0;
+    pcpp::IFileReaderDevice *reader = nullptr;
     std::vector<pcpp::RawPacket> rawPackets;
     std::vector<pcpp::Packet> parsedPackets;
 };

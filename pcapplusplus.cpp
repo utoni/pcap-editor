@@ -1,5 +1,3 @@
-#include "pcapplusplus.h"
-
 #include <chrono>
 #include <EthLayer.h>
 #include <exception>
@@ -11,6 +9,8 @@
 #include <TcpLayer.h>
 #include <tuple>
 #include <UdpLayer.h>
+
+#include "pcapplusplus.h"
 
 PcapPlusPlus::PcapPlusPlus(std::string fileName) : rawPackets(), parsedPackets()
 {
@@ -69,6 +69,11 @@ bool PcapPlusPlus::processPacket(pcpp::Packet & packet)
         return false;
 
     if (reader->getNextPacket(rawPacket)) {
+        if (rawPackets.size() == 0) {
+            const auto & pktTs = rawPacket.getPacketTimeStamp();
+            firstPacketTs = pktTs.tv_sec;
+            firstPacketTs += pktTs.tv_nsec / 10e9f;
+        }
         rawPackets.emplace_back(std::move(rawPacket));
 
         pcpp::Packet parsedPacket(&rawPackets.back(), false);

@@ -1,14 +1,14 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "bytewindow.h"
-#include "pcapplusplus.h"
-#include "qhexedit2/src/qhexedit.h"
-
 #include <atomic>
 #include <optional>
 #include <QMainWindow>
 #include <QMenu>
+
+#include "bytewindow.h"
+#include "pcapplusplus.h"
+#include "qhexedit2/src/qhexedit.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -49,7 +49,6 @@ private:
         int y;
     } mouse;
 
-    time_t firstPacketTs = 0;
     Ui::MainWindow *ui = nullptr;
     QString statusbarMessage;
     PcapPlusPlus *ppp = nullptr;

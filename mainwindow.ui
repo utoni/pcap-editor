@@ -42,7 +42,7 @@
     <item>
      <layout class="QGridLayout" name="gridLayout">
       <item row="1" column="0">
-       <widget class="QTableWidget" name="tableWidget">
+       <widget class="PacketsTableWidget" name="tableWidget">
         <property name="styleSheet">
          <string notr="true">color: black;
 background-color: white;
@@ -68,21 +68,81 @@ border-color: beige;</string>
         <attribute name="horizontalHeaderCascadingSectionResizes">
          <bool>false</bool>
         </attribute>
+        <attribute name="horizontalHeaderMinimumSectionSize">
+         <number>120</number>
+        </attribute>
+        <attribute name="horizontalHeaderDefaultSectionSize">
+         <number>120</number>
+        </attribute>
+        <attribute name="horizontalHeaderHighlightSections">
+         <bool>false</bool>
+        </attribute>
         <attribute name="horizontalHeaderStretchLastSection">
          <bool>true</bool>
         </attribute>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
-        <column/>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>Timestamp</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Packet Size</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 2</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 3</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 4</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 2 Source</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 2 Destination</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 3 Source</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 3 Destination</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 4 Source</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Layer 4 Destination</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Additional Information</string>
+         </property>
+        </column>
        </widget>
       </item>
       <item row="0" column="0">
@@ -128,6 +188,13 @@ border-color: beige;</string>
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PacketsTableWidget</class>
+   <extends>QTableWidget</extends>
+   <header>packetstablewidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

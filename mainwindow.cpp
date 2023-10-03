@@ -1,9 +1,9 @@
-#include "mainwindow.h"
-#include "ui_mainwindow.h"
-
 #include <exception>
 #include <qfiledialog.h>
 #include <QMouseEvent>
+
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -42,25 +42,6 @@ MainWindow::MainWindow(QWidget *parent)
     enableMenuButtons(this, false);
     enableHexEditButtons(this, false);
 
-    const auto& isEthernetSrcColumn = [this](const int& column) {
-        return column == 6;
-    };
-    const auto& isEthernetDstColumn = [this](const int& column) {
-        return column == 7;
-    };
-    const auto& isIpSrcColumn = [this](const int& column) {
-        return column == 8;
-    };
-    const auto& isIpDstColumn = [this](const int& column) {
-        return column == 9;
-    };
-    const auto& isPortSrcColumn = [this](const int& column) {
-        return column == 10;
-    };
-    const auto& isPortDstColumn = [this](const int& column) {
-        return column == 11;
-    };
-
     tableContextMenu.randomize.setText("Randomize");
     tableContextMenu.menu.addAction(&tableContextMenu.randomize);
 
@@ -74,55 +55,31 @@ MainWindow::MainWindow(QWidget *parent)
     myHexEdit.contextMenu.addAction(&myHexEdit.deleteBytes);
     myHexEdit.contextMenu.addAction(&myHexEdit.deleteSelection);
 
-    connect(&tableContextMenu.randomize, &QAction::triggered, this, [this, isEthernetSrcColumn, isEthernetDstColumn, isIpSrcColumn, isIpDstColumn, isPortSrcColumn, isPortDstColumn](bool checked __attribute__((unused))){
-        if (!ppp)
-            throw std::runtime_error("Can not randomize, no packets available");
+    connect(&tableContextMenu.randomize, &QAction::triggered, this, [this](bool checked __attribute__((unused))){
+        ui->tableWidget->randomizeLayerItem(ppp);
 
-        const auto & y = ui->tableWidget->currentRow();
-        const auto & col = ui->tableWidget->currentColumn() + 1;
-
-        if (isEthernetSrcColumn(col) || isEthernetDstColumn(col)) {
-            ppp->randomizeEth(y, isEthernetSrcColumn(col));
-        } else if (isIpSrcColumn(col) || isIpDstColumn(col)) {
-            ppp->randomizeIp(y, isIpSrcColumn(col));
-        } else if (isPortSrcColumn(col) || isPortDstColumn(col)) {
-            ppp->randomizePort(y, isPortSrcColumn(col));
-        } else throw std::runtime_error("BUG: No supported column selected");
-
-        if (!MainWindow::updateTableRow(y))
-            throw std::runtime_error("BUG: Could not update table row");
+        const auto &rawPacket = ppp->getRawPacket(ui->tableWidget->currentRow());
+        myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
     });
 
-    connect(ui->tableWidget, &QTableWidget::itemChanged, this, [this, isEthernetSrcColumn, isEthernetDstColumn, isIpSrcColumn, isIpDstColumn, isPortSrcColumn, isPortDstColumn](QTableWidgetItem *item) {
-        if (!item || !ppp)
-            return;
+    connect(ui->tableWidget, &QTableWidget::itemChanged, this, [this](QTableWidgetItem *item) {
+        ui->tableWidget->setLayerItem(item, ppp, isProcessing);
 
-        const auto & y = ui->tableWidget->currentRow();
-        const auto & col = ui->tableWidget->currentColumn() + 1;
-        const auto & text = item->text().toStdString();
-
-        if (isEthernetSrcColumn(col) || isEthernetDstColumn(col)) {
-            ppp->setEth(y, text, isEthernetSrcColumn(col));
-        } else if (isIpSrcColumn(col) || isIpDstColumn(col)) {
-            ppp->setIp(y, text, isIpSrcColumn(col));
-        } else if (isPortSrcColumn(col) || isPortDstColumn(col)) {
-            ppp->setPort(y, text, isPortSrcColumn(col));
+        if (!isProcessing) {
+            const auto &rawPacket = ppp->getRawPacket(item->row());
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
         }
-
-        if (isProcessing)
-            return;
-        if (!MainWindow::updateTableRow(y))
-            throw std::runtime_error("BUG: Could not update table row");
     });
 
-    connect(ui->tableWidget, &QTableWidget::customContextMenuRequested, this, [this, enableTableButtons, isEthernetSrcColumn, isEthernetDstColumn, isIpSrcColumn, isIpDstColumn, isPortSrcColumn, isPortDstColumn](const QPoint& pos){
+    connect(ui->tableWidget, &QTableWidget::customContextMenuRequested, this, [this, enableTableButtons](const QPoint& pos){
         const auto & globalPos = ui->tableWidget->viewport()->mapToGlobal(pos);
         const auto & col = ui->tableWidget->currentColumn() + 1;
+        const auto & table = ui->tableWidget;
 
         if (ppp
-            && (isEthernetSrcColumn(col) || isEthernetDstColumn(col)
-                || isIpSrcColumn(col) || isIpDstColumn(col)
-                || isPortSrcColumn(col) || isPortDstColumn(col)))
+            && (table->isEthernetSrcColumn(col) || table->isEthernetDstColumn(col)
+                || table->isIpSrcColumn(col) || table->isIpDstColumn(col)
+                || table->isPortSrcColumn(col) || table->isPortDstColumn(col)))
             enableTableButtons(this, true);
         else
             enableTableButtons(this, false);
@@ -203,7 +160,7 @@ MainWindow::MainWindow(QWidget *parent)
         if (fileName.length() > 0) {
             ui->lineEdit->clear();
             ui->tableWidget->clearSelection();
-            ui->tableWidget->clear();
+            ui->tableWidget->clearContents();
             ui->tableWidget->setRowCount(0);
             myHexEdit.editor.data().data_ptr()->clear();
             enableTableButtons(this, true);
@@ -231,7 +188,7 @@ MainWindow::MainWindow(QWidget *parent)
                     throw std::runtime_error("Reopen PCAP File to apply a BPF failed.");
                 if (!ppp->setFilter(ui->lineEdit->text()))
                     throw std::runtime_error("Could not re-apply a previously set filter.");
-                ui->tableWidget->clear();
+                ui->tableWidget->clearContents();
                 ui->tableWidget->setRowCount(0);
                 emit processPcap();
             }
@@ -285,14 +242,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this, &MainWindow::processPcap, this, [&](){
         pcpp::Packet packet;
         if (!ppp) throw std::runtime_error("PcapPlusPlus was not initialized.");
-        firstPacketTs = 0;
 
         isProcessing = true;
         while (ppp->processPacket(packet)) {
-            if (!firstPacketTs)
-                firstPacketTs = packet.getRawPacket()->getPacketTimeStamp().tv_sec;
             emit onPacketAvailable();
         }
+        ui->tableWidget->clearSelection();
         isProcessing = false;
 
         pcpp::PcapFileReaderDevice::PcapStats stats;
@@ -304,17 +259,14 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(this, &MainWindow::onPacketAvailable, this, [&]() {
-        if (!addTableRow())
-            throw std::runtime_error("Could not add row to table for packet");
+        emit ui->tableWidget->addRow(ppp);
     });
 
-    connect(ui->tableWidget, &QTableWidget::cellPressed, this, [&] {
-        const auto &selected = ui->tableWidget->selectedItems();
-        if (selected.empty())
-            return;
-
-        const auto &rawPacket = ppp->getRawPacket(selected.last()->row());
-        myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+    connect(ui->tableWidget, &QTableWidget::currentCellChanged, this, [&](int currentRow, int currentColumn, int previousRow, int previousColumn) {
+        if (!isProcessing && currentRow >= 0) {
+            const auto &rawPacket = ppp->getRawPacket(currentRow);
+            myHexEdit.editor.setData(QByteArray::fromRawData(reinterpret_cast<const char *>(rawPacket.getRawData()), rawPacket.getRawDataLen()));
+        }
     });
 
     connect(ui->tableWidget, &QTableWidget::itemSelectionChanged, this, [this, enableHexEditButtons]() {
@@ -361,96 +313,6 @@ pcpp::RawPacket* MainWindow::currentSelectedPacket()
         return nullptr;
 
     return &ppp->getRawPacket(selected.last()->row());
-}
-
-bool MainWindow::addTableRow()
-{
-    QTableWidgetItem* itemRelativeTime = new QTableWidgetItem();
-    QTableWidgetItem* itemFrameLength = new QTableWidgetItem();
-    QTableWidgetItem* itemFirstLayerProtocol = new QTableWidgetItem();
-    QTableWidgetItem* itemSecondLayerProtocol = new QTableWidgetItem();
-    QTableWidgetItem* itemThirdLayerProtocol = new QTableWidgetItem();
-    QTableWidgetItem* itemSrcMac = new QTableWidgetItem();
-    QTableWidgetItem* itemDstMac = new QTableWidgetItem();
-    QTableWidgetItem* itemSrcIp = new QTableWidgetItem();
-    QTableWidgetItem* itemDstIp = new QTableWidgetItem();
-    QTableWidgetItem* itemSrcPort = new QTableWidgetItem();
-    QTableWidgetItem* itemDstPort = new QTableWidgetItem();
-    QTableWidgetItem* itemDesc = new QTableWidgetItem();
-
-    if (!itemRelativeTime || !itemFrameLength || !itemFirstLayerProtocol || !itemSecondLayerProtocol || !itemThirdLayerProtocol
-        || !itemSrcMac || !itemDstMac || !itemSrcIp || !itemDstIp || !itemSrcPort || ! itemDstPort || !itemDesc)
-    {
-        delete itemRelativeTime;
-        delete itemFrameLength;
-        delete itemFirstLayerProtocol;
-        delete itemSecondLayerProtocol;
-        delete itemThirdLayerProtocol;
-        delete itemSrcMac;
-        delete itemDstMac;
-        delete itemSrcIp;
-        delete itemDstIp;
-        delete itemSrcPort;
-        delete itemDstPort;
-        delete itemDesc;
-
-        return false;
-    }
-
-    ui->tableWidget->insertRow(ui->tableWidget->rowCount());
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 0, itemRelativeTime);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 1, itemFrameLength);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 2, itemFirstLayerProtocol);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 3, itemSecondLayerProtocol);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 4, itemThirdLayerProtocol);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 5, itemSrcMac);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 6, itemDstMac);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 7, itemSrcIp);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 8, itemDstIp);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 9, itemSrcPort);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 10, itemDstPort);
-    ui->tableWidget->setItem(ui->tableWidget->rowCount() - 1, 11, itemDesc);
-
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 0)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 1)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 2)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 3)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 4)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-    ui->tableWidget->item(ui->tableWidget->rowCount() - 1, 11)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-
-    return updateTableRow(ui->tableWidget->rowCount() - 1);
-}
-
-bool MainWindow::updateTableRow(size_t index)
-{
-    if (!ppp)
-        return false;
-
-    auto parsedPacket = pcpp::Packet(&ppp->getRawPacket(index));
-    const auto *firstLayer = PcapPlusPlus::getFirstLayer(parsedPacket);
-    const auto *secondLayer = firstLayer ? firstLayer->getNextLayer() : nullptr;
-    const auto *thirdLayer = secondLayer ? secondLayer->getNextLayer() : nullptr;
-    const auto ethTuple = PcapPlusPlus::getEthTuple(parsedPacket);
-    const auto ipTuple = PcapPlusPlus::getIpTuple(parsedPacket);
-    const auto l4Tuple = PcapPlusPlus::getLayer4Tuple(parsedPacket);
-
-    if (!firstLayer)
-        return false;
-
-    ui->tableWidget->item(index, 0)->setText(tr("%1").arg(parsedPacket.getRawPacket()->getPacketTimeStamp().tv_sec - firstPacketTs));
-    ui->tableWidget->item(index, 1)->setText(tr("%1").arg(parsedPacket.getRawPacket()->getFrameLength()));
-    ui->tableWidget->item(index, 2)->setText(tr("%1").arg(firstLayer ? PcapPlusPlus::getProtocolTypeAsString(firstLayer->getProtocol()) : ""));
-    ui->tableWidget->item(index, 3)->setText(tr("%1").arg(secondLayer ? PcapPlusPlus::getProtocolTypeAsString(secondLayer->getProtocol()) : ""));
-    ui->tableWidget->item(index, 4)->setText(tr("%1").arg(thirdLayer ? PcapPlusPlus::getProtocolTypeAsString(thirdLayer->getProtocol()) : ""));
-    ui->tableWidget->item(index, 5)->setText(tr("%1").arg(std::get<0>(ethTuple)));
-    ui->tableWidget->item(index, 6)->setText(tr("%1").arg(std::get<1>(ethTuple)));
-    ui->tableWidget->item(index, 7)->setText(tr("%1").arg(std::get<0>(ipTuple)));
-    ui->tableWidget->item(index, 8)->setText(tr("%1").arg(std::get<1>(ipTuple)));
-    ui->tableWidget->item(index, 9)->setText(tr("%1").arg(std::get<0>(l4Tuple)));
-    ui->tableWidget->item(index, 10)->setText(tr("%1").arg(std::get<1>(l4Tuple)));
-    ui->tableWidget->item(index, 11)->setText(tr("%1").arg(QString::fromStdString(thirdLayer ? thirdLayer->toString() : (secondLayer ? secondLayer->toString() : (firstLayer ? firstLayer->toString() : "")))));
-
-    return true;
 }
 
 bool MainWindow::eventFilter(QObject *obj __attribute__((unused)), QEvent *event)

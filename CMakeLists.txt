@@ -69,6 +69,9 @@ set(PROJECT_SOURCES
         pcapplusplus.cpp
         pcapplusplus.h
 
+        packetstablewidget.cpp
+        packetstablewidget.h
+
         qhexedit2/src/chunks.cpp
         qhexedit2/src/chunks.h
         qhexedit2/src/commands.cpp
@@ -97,7 +100,7 @@ endif()
 
 add_dependencies(pcap-editor PcapPlusPlus)
 
-target_include_directories(pcap-editor PRIVATE ${CMAKE_BINARY_DIR}/ppp-install/include/pcapplusplus)
+target_include_directories(pcap-editor PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/ppp-install/include/pcapplusplus)
 target_link_libraries(pcap-editor PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
                                           ${CMAKE_BINARY_DIR}/ppp-install/lib/libPcap++.a
                                           ${CMAKE_BINARY_DIR}/ppp-install/lib/libPacket++.a
