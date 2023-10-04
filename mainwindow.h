@@ -26,6 +26,7 @@ public:
     bool updateTableRow(size_t index);
 
 private:
+    void closeEvent(QCloseEvent *bar);
     bool eventFilter(QObject *obj, QEvent *event);
     void updateStatusBarMessage(const QString & message);
 
@@ -52,6 +53,7 @@ private:
     Ui::MainWindow *ui = nullptr;
     QString statusbarMessage;
     PcapPlusPlus *ppp = nullptr;
+    std::atomic<bool> isAboutToClose = false;
     std::atomic<bool> isProcessing = false;
 
 signals:

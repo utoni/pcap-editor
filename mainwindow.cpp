@@ -244,8 +244,16 @@ MainWindow::MainWindow(QWidget *parent)
         if (!ppp) throw std::runtime_error("PcapPlusPlus was not initialized.");
 
         isProcessing = true;
+        const QDateTime startTime = QDateTime::currentDateTime();
         while (ppp->processPacket(packet)) {
+            if (isAboutToClose)
+                break;
+
             emit onPacketAvailable();
+
+            const QDateTime currentTime = QDateTime::currentDateTime();
+            if (startTime.msecsTo(currentTime) % 100 == 0)
+                qApp->processEvents();
         }
         ui->tableWidget->clearSelection();
         isProcessing = false;
@@ -313,6 +321,12 @@ pcpp::RawPacket* MainWindow::currentSelectedPacket()
         return nullptr;
 
     return &ppp->getRawPacket(selected.last()->row());
+}
+
+void MainWindow::closeEvent(QCloseEvent *closeEvent)
+{
+    isAboutToClose = true;
+    closeEvent->accept();
 }
 
 bool MainWindow::eventFilter(QObject *obj __attribute__((unused)), QEvent *event)
