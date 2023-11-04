@@ -50,6 +50,10 @@ private:
         int y;
     } mouse;
 
+    struct {
+        bool backspace;
+    } keyboard;
+
     Ui::MainWindow *ui = nullptr;
     QString statusbarMessage;
     PcapPlusPlus *ppp = nullptr;

@@ -21,6 +21,10 @@ MainWindow::MainWindow(QWidget *parent)
     ui->tableWidget->setMouseTracking(true);
     qApp->installEventFilter(this);
 
+    mouse.x = -1;
+    mouse.y = -1;
+    keyboard.backspace = false;
+
     myHexEdit.bytewindow = new ByteWindow(parent);
     if (!myHexEdit.bytewindow)
         throw std::runtime_error("UI - ByteWindow: not enough memory available");
@@ -290,7 +294,7 @@ MainWindow::MainWindow(QWidget *parent)
             return;
         const auto& cursorPos = myHexEdit.editor.cursorPosition() / 2;
         auto cursorData = myHexEdit.editor.dataAt(cursorPos, 1);
-        if (myHexEdit.editor.cursorPosition() % 2 != 0 && myHexEdit.editor.cursorPosition() / 2 == myHexEdit.editor.data().size() - 1) {
+        if (!keyboard.backspace && myHexEdit.editor.cursorPosition() % 2 != 0 && myHexEdit.editor.cursorPosition() / 2 == myHexEdit.editor.data().size() - 1) {
             const uint8_t new_byte = 0x00;
             rawPacket->reallocateData(rawPacket->getRawDataLen() + 1);
             rawPacket->insertData(rawPacket->getRawDataLen(), &new_byte, sizeof(new_byte));
@@ -333,12 +337,23 @@ bool MainWindow::eventFilter(QObject *obj __attribute__((unused)), QEvent *event
 {
     if (event->type() == QEvent::MouseMove)
     {
-        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        QMouseEvent const * const mouseEvent = static_cast<QMouseEvent*>(event);
 
         mouse.x = mouseEvent->pos().x();
         mouse.y = mouseEvent->pos().y();
         ui->statusbar->showMessage(tr("[x: %1 | y: %2] %3").arg(mouse.x, 4).arg(mouse.y, 4).arg(statusbarMessage));
+    } else if (event->type() == QEvent::KeyPress) {
+        QKeyEvent const * const key = static_cast<QKeyEvent*>(event);
+
+        if (key->key() == Qt::Key_Backspace)
+            keyboard.backspace = true;
+    } else if (event->type() == QEvent::KeyRelease) {
+        QKeyEvent const * const key = static_cast<QKeyEvent*>(event);
+
+        if (key->key() == Qt::Key_Backspace)
+            keyboard.backspace = false;
     }
+
     return false;
 }
 
