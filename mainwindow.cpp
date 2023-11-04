@@ -224,7 +224,9 @@ MainWindow::MainWindow(QWidget *parent)
             return;
 
         QString selectedFilter;
-        QString fileName = QFileDialog::getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"), &selectedFilter);
+        QFileDialog saveDialog;
+        saveDialog.setDefaultSuffix("pcap");
+        QString fileName = saveDialog.getSaveFileName(this, tr("Save PCAP File"), "", tr("PCAP Files (*.pcap);;All Files (*.*)"), &selectedFilter);
         if (fileName.length() > 0) {
             pcpp::PcapFileWriterDevice pcapWriter(fileName.toStdString(), ppp->getLinkLayer());
             if (!pcapWriter.open())
@@ -303,6 +305,8 @@ MainWindow::MainWindow(QWidget *parent)
         }
         rawPacket->removeData(cursorPos, 1);
         rawPacket->insertData(cursorPos, reinterpret_cast<const uint8_t *>(cursorData.data()), cursorData.size());
+        const auto& row = currentSelectedRow();
+        ppp->fixupHeaders(row);
     });
 }
 
@@ -325,6 +329,15 @@ pcpp::RawPacket* MainWindow::currentSelectedPacket()
         return nullptr;
 
     return &ppp->getRawPacket(selected.last()->row());
+}
+
+ssize_t MainWindow::currentSelectedRow()
+{
+    const auto &selected = ui->tableWidget->selectedItems();
+    if (selected.empty())
+        return -1;
+
+    return selected.last()->row();
 }
 
 void MainWindow::closeEvent(QCloseEvent *closeEvent)

@@ -27,6 +27,7 @@ public:
     bool setEth(size_t index, const std::string & eth, bool isSourceIp);
     bool setIp(size_t index, const std::string & ip, bool isSourceIp);
     bool setPort(size_t index, const std::string & port, bool isSourceIp);
+    void fixupHeaders(size_t index);
     bool getPcapStatistics(pcpp::IFileDevice::PcapStats & stats);
     double getFirstPacketTimestamp() { return firstPacketTs; }
 

@@ -22,6 +22,7 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     pcpp::RawPacket* currentSelectedPacket();
+    ssize_t currentSelectedRow();
     bool addTableRow();
     bool updateTableRow(size_t index);
 

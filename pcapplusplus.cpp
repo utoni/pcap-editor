@@ -306,6 +306,24 @@ bool PcapPlusPlus::setPort(size_t index, const std::string & port, bool isSource
     return retval;
 }
 
+void PcapPlusPlus::fixupHeaders(size_t index)
+{
+    auto parsedPacket = pcpp::Packet(&getRawPacket(index));
+    auto * ip4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
+    auto * ip6Layer = parsedPacket.getLayerOfType<pcpp::IPv6Layer>();
+    auto * udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+    auto * tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
+
+    if (ip4Layer)
+        ip4Layer->computeCalculateFields();
+    if (ip6Layer)
+        ip6Layer->computeCalculateFields();
+    if (udpLayer)
+        udpLayer->computeCalculateFields();
+    if (tcpLayer)
+        tcpLayer->computeCalculateFields();
+}
+
 bool PcapPlusPlus::getPcapStatistics(pcpp::IFileDevice::PcapStats & stats)
 {
     if (reader) {
