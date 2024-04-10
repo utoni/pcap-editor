@@ -166,7 +166,7 @@ MainWindow::MainWindow(QWidget *parent)
             ui->tableWidget->clearSelection();
             ui->tableWidget->clearContents();
             ui->tableWidget->setRowCount(0);
-            myHexEdit.editor.data().data_ptr()->clear();
+            myHexEdit.editor.setData(QByteArray::fromRawData(nullptr, 0));
             enableTableButtons(this, true);
             enableMenuButtons(this, true);
             enableHexEditButtons(this, false);
